@@ -1,0 +1,6 @@
+pynput
+pystray
+Pillow
+zeroconf
+pytest
+pytest-asyncio
