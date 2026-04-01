@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="server/icon.png" alt="OpenMouse Logo" width="150"/>
+  <img src="assets/logo.png" alt="OpenMouse Logo" width="250"/>
 </p>
 
 <h1 align="center">OpenMouse</h1>
