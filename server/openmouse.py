@@ -45,7 +45,10 @@ def is_installed() -> bool:
 
 
 def ensure_installed():
-    """Install silently if not already running from install dir. Returns installed exe path."""
+    """Install silently if not already running from install dir. Returns installed exe path. Windows-only — Linux is handled by scripts/install.sh."""
+    if sys.platform != "win32":
+        return None
+
     install_dir = get_install_dir()
     install_dir.mkdir(parents=True, exist_ok=True)
 
@@ -61,7 +64,6 @@ def ensure_installed():
     else:
         dest = src
 
-    # Copy icon.png next to executable
     icon_src = Path(__file__).parent / "icon.png"
     icon_dest = install_dir / "icon.png"
     if icon_src.exists() and icon_src.resolve() != icon_dest.resolve():
@@ -72,27 +74,14 @@ def ensure_installed():
 
 
 def _register_autostart(exe_path: Path):
-    """Register the executable to start on login."""
-    if sys.platform == "win32":
-        import winreg
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, str(exe_path))
-        winreg.CloseKey(key)
-        logger.info("Registered in Windows startup.")
-    else:
-        autostart_dir = Path.home() / ".config" / "autostart"
-        autostart_dir.mkdir(parents=True, exist_ok=True)
-        desktop_entry = autostart_dir / "openmouse.desktop"
-        desktop_entry.write_text(
-            f"[Desktop Entry]\n"
-            f"Type=Application\n"
-            f"Name={APP_NAME}\n"
-            f"Exec={exe_path}\n"
-            f"Hidden=false\n"
-            f"NoDisplay=false\n"
-            f"X-GNOME-Autostart-enabled=true\n"
-        )
-        logger.info("Registered in Linux autostart.")
+    """Register the executable to start on login. Windows-only — Linux is handled by scripts/install.sh."""
+    if sys.platform != "win32":
+        return
+    import winreg
+    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE)
+    winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, str(exe_path))
+    winreg.CloseKey(key)
+    logger.info("Registered in Windows startup.")
 
 
 def uninstall():
