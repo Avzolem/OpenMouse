@@ -118,7 +118,7 @@ python openmouse.py
 
 #### Opción 1: APK
 
-Descarga la APK desde [Releases](https://github.com/Avzolem/OpenMouse/releases) e instálala en tu dispositivo.
+Descarga `openmouse-android.apk` desde [Releases](https://github.com/Avzolem/OpenMouse/releases) e instálala en tu dispositivo. Android pedirá permiso para instalar desde "fuentes desconocidas" — acepta y listo.
 
 #### Opción 2: Compilar desde el código fuente
 
