@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r server/requirements.txt
+          pip install pyinstaller
+      - name: Build
+        working-directory: server
+        run: pyinstaller openmouse.spec
+      - name: Rename
+        run: mv server/dist/openmouse server/dist/openmouse-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openmouse-linux-x86_64
+          path: server/dist/openmouse-linux-x86_64
+
+  build-linux-aarch64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r server/requirements.txt
+          pip install pyinstaller
+      - name: Build
+        working-directory: server
+        run: pyinstaller openmouse.spec
+      - name: Rename
+        run: mv server/dist/openmouse server/dist/openmouse-linux-aarch64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openmouse-linux-aarch64
+          path: server/dist/openmouse-linux-aarch64
+
+  build-windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r server/requirements.txt
+          pip install pyinstaller
+      - name: Build
+        working-directory: server
+        run: pyinstaller openmouse.spec
+      - name: Rename
+        run: mv server/dist/openmouse.exe server/dist/openmouse-windows-x86_64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openmouse-windows-x86_64
+          path: server/dist/openmouse-windows-x86_64.exe
+
+  release:
+    needs: [build-linux-x86_64, build-linux-aarch64, build-windows-x86_64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/openmouse-linux-x86_64
+            dist/openmouse-linux-aarch64
+            dist/openmouse-windows-x86_64.exe
+          generate_release_notes: true
