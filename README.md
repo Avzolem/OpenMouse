@@ -93,9 +93,17 @@
 
 ### Servidor (PC - Windows/Linux)
 
-#### Opción 1: Ejecutable (recomendado)
+#### Opción 1: Instalación rápida (recomendado)
 
-Descarga `openmouse.exe` desde [Releases](https://github.com/Avzolem/OpenMouse/releases) y ejecútalo. Se instala automáticamente y arranca al encender tu PC.
+**Windows:** Descarga `openmouse-windows-x86_64.exe` desde [Releases](https://github.com/Avzolem/OpenMouse/releases) y ejecútalo. Se instala automáticamente y arranca al encender tu PC.
+
+**Linux (x86_64 y aarch64):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Avzolem/OpenMouse/master/scripts/install.sh | sh
+```
+
+Se descarga el binario, se registra en autostart, y arranca el server. Todo queda en `~/.local/share/openmouse/` — no usa sudo ni toca `/usr/local`.
 
 #### Opción 2: Desde el código fuente
 
@@ -151,7 +159,14 @@ Usa la navegación inferior para cambiar entre:
 - **Media** — Controla reproducción y volumen con botones grandes.
 
 ### Desinstalar
-Click derecho en el tray icon → **Uninstall**. Se elimina el auto-inicio y los archivos.
+
+**Desde la app:** Click derecho en el tray icon → **Uninstall**. Se elimina el auto-inicio y los archivos.
+
+**Linux por terminal:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Avzolem/OpenMouse/master/scripts/uninstall.sh | sh
+```
 
 ---
 
