@@ -54,3 +54,57 @@ class TestRegisterAutostart:
         import openmouse
         openmouse._register_autostart(tmp_path / "openmouse")
         assert not (tmp_path / ".config" / "autostart" / "openmouse.desktop").exists()
+
+
+class TestUninstallLinux:
+    def test_schedules_detached_removal_of_install_dir(self, tmp_path, monkeypatch):
+        install_dir = tmp_path / "openmouse"
+        install_dir.mkdir()
+        (install_dir / "openmouse").write_text("fake binary")
+
+        # The current uninstall() builds the desktop path as
+        # Path.home() / ".config" / "autostart" / "openmouse.desktop",
+        # so create it at the same location relative to our fake home.
+        autostart = tmp_path / ".config" / "autostart" / "openmouse.desktop"
+        autostart.parent.mkdir(parents=True)
+        autostart.write_text("entry")
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("openmouse.get_install_dir", lambda: install_dir)
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+        captured = []
+        def fake_popen(cmd, **kwargs):
+            captured.append((cmd, kwargs))
+            return MagicMock()
+        monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+        from openmouse import uninstall
+        uninstall()
+
+        # Autostart entry removed inline
+        assert not autostart.exists()
+
+        # Detached deletion scheduled
+        assert len(captured) == 1
+        cmd, kwargs = captured[0]
+        assert cmd[0] == "sh"
+        assert cmd[1] == "-c"
+        assert "rm -rf" in cmd[2]
+        assert str(install_dir) in cmd[2]
+        assert kwargs.get("start_new_session") is True
+
+    def test_no_op_when_nothing_installed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("openmouse.get_install_dir", lambda: tmp_path / "missing")
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+        called = []
+        monkeypatch.setattr(
+            "subprocess.Popen",
+            lambda cmd, **kw: called.append(cmd) or MagicMock(),
+        )
+
+        from openmouse import uninstall
+        uninstall()  # should not raise
+        assert called == []  # no removal scheduled if dir doesn't exist

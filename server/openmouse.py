@@ -121,10 +121,16 @@ def uninstall():
 
         install_dir = get_install_dir()
         if install_dir.exists():
-            current = get_exe_path().resolve()
-            if not current.is_relative_to(install_dir):
-                shutil.rmtree(install_dir)
-            logger.info(f"Removed: {install_dir}")
+            # Schedule detached removal so we can delete the directory we're
+            # currently running from. Mirrors the Windows .bat pattern.
+            import subprocess
+            subprocess.Popen(
+                ["sh", "-c", f'sleep 2 && rm -rf "{install_dir}"'],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info(f"Scheduled removal of: {install_dir}")
 
     logger.info("OpenMouse uninstalled.")
 
