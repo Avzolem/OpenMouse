@@ -1,4 +1,6 @@
 // app/lib/screens/home_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:openmouse/services/discovery_service.dart';
 import 'package:openmouse/services/connection_service.dart';
@@ -16,13 +18,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final DiscoveryService _discovery = DiscoveryService();
   final TextEditingController _ipController = TextEditingController();
+  StreamSubscription<List<DiscoveredServer>>? _serversSub;
   List<DiscoveredServer> _servers = [];
   bool _connecting = false;
 
   @override
   void initState() {
     super.initState();
-    _discovery.serversStream.listen((servers) {
+    _serversSub = _discovery.serversStream.listen((servers) {
       if (mounted) setState(() => _servers = servers);
     });
     _discovery.startScan();
@@ -30,7 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _discovery.dispose();
+    _serversSub?.cancel();
+    unawaited(_discovery.dispose());
     _ipController.dispose();
     super.dispose();
   }

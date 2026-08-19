@@ -7,12 +7,21 @@ import 'package:openmouse/models/packet.dart';
 class ConnectionService {
   static const int defaultUdpPort = 19780;
   static const int defaultTcpPort = 19781;
+  static const Duration reconnectInterval = Duration(seconds: 2);
 
   RawDatagramSocket? _udpSocket;
   Socket? _tcpSocket;
   String? _serverIp;
+  // Direccion ya resuelta: el descubrimiento mDNS puede devolver un hostname, y
+  // construir InternetAddress con uno lanza. Ademas evita reconstruirla en cada
+  // paquete de movimiento, que salen a 60-100 Hz.
+  InternetAddress? _serverAddress;
+  int _udpPort = defaultUdpPort;
+  int _tcpPort = defaultTcpPort;
   bool _connected = false;
+  bool _disposed = false;
   Timer? _reconnectTimer;
+  bool _reconnecting = false;
 
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
@@ -20,68 +29,124 @@ class ConnectionService {
   Stream<bool> get connectionStream => _connectionController.stream;
   bool get isConnected => _connected;
   String? get serverIp => _serverIp;
+  int get udpPort => _udpPort;
+  int get tcpPort => _tcpPort;
 
   Future<void> connect(String ip,
       {int udpPort = defaultUdpPort, int tcpPort = defaultTcpPort}) async {
+    // Soltar cualquier socket anterior: reconectar sin cerrarlos los filtraba.
+    await _closeSockets();
+
+    final socket = await Socket.connect(ip, tcpPort,
+        timeout: const Duration(seconds: 5));
+    final udp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+
     _serverIp = ip;
+    _serverAddress = socket.remoteAddress;
+    _udpPort = udpPort;
+    _tcpPort = tcpPort;
+    _tcpSocket = socket;
+    _udpSocket = udp;
 
-    _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-
-    _tcpSocket = await Socket.connect(ip, tcpPort);
-    _tcpSocket!.listen(
+    socket.listen(
       (_) {},
-      onError: (_) => _handleDisconnect(),
-      onDone: _handleDisconnect,
+      onError: (_) => _handleDisconnect(socket),
+      onDone: () => _handleDisconnect(socket),
+      cancelOnError: true,
     );
 
     _connected = true;
-    _connectionController.add(true);
+    _emit(true);
   }
 
   void sendUdp(Uint8List data) {
-    if (_udpSocket != null && _serverIp != null) {
-      _udpSocket!.send(data, InternetAddress(_serverIp!), defaultUdpPort);
+    final socket = _udpSocket;
+    final address = _serverAddress;
+    if (socket == null || address == null) return;
+    try {
+      socket.send(data, address, _udpPort);
+    } on SocketException {
+      // Datagrama perdido: el canal UDP es best-effort por diseno.
     }
   }
 
   void sendTcp(Uint8List data) {
-    if (_tcpSocket != null) {
-      _tcpSocket!.add(Packet.wrapTcp(data));
+    final socket = _tcpSocket;
+    if (socket == null || !_connected) return;
+    try {
+      socket.add(Packet.wrapTcp(data));
+    } on SocketException {
+      _handleDisconnect(socket);
+    } on StateError {
+      // El socket se cerro entre la comprobacion y el add.
+      _handleDisconnect(socket);
     }
   }
 
-  void _handleDisconnect() {
+  void _emit(bool value) {
+    if (!_disposed && !_connectionController.isClosed) {
+      _connectionController.add(value);
+    }
+  }
+
+  /// [source] identifica el socket que reporta el fallo: onError y onDone
+  /// pueden dispararse ambos, y un socket ya sustituido no debe tumbar la
+  /// conexion nueva.
+  void _handleDisconnect(Socket source) {
+    if (_disposed) return;
+    if (!identical(source, _tcpSocket)) return;
+    if (!_connected) return;
     _connected = false;
-    _connectionController.add(false);
+    _emit(false);
     _startReconnect();
   }
 
   void _startReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      if (_serverIp == null) return;
+    if (_disposed || _reconnectTimer != null) return;
+    _reconnectTimer = Timer.periodic(reconnectInterval, (timer) async {
+      // Sin este guardia, un connect() mas lento que el intervalo lanzaria
+      // intentos solapados.
+      if (_reconnecting || _disposed) return;
+      final ip = _serverIp;
+      if (ip == null) return;
+      _reconnecting = true;
       try {
-        await connect(_serverIp!);
-        _reconnectTimer?.cancel();
+        await connect(ip, udpPort: _udpPort, tcpPort: _tcpPort);
+        timer.cancel();
+        _reconnectTimer = null;
       } catch (_) {
-        // Will retry on next tick
+        // Se reintenta en el siguiente tick.
+      } finally {
+        _reconnecting = false;
       }
     });
   }
 
-  Future<void> disconnect() async {
-    _reconnectTimer?.cancel();
-    _tcpSocket?.destroy();
-    _udpSocket?.close();
+  Future<void> _closeSockets() async {
+    final tcp = _tcpSocket;
     _tcpSocket = null;
+    _udpSocket?.close();
     _udpSocket = null;
-    _connected = false;
-    _serverIp = null;
-    _connectionController.add(false);
+    if (tcp != null) {
+      tcp.destroy();
+    }
   }
 
-  void dispose() {
-    disconnect();
-    _connectionController.close();
+  Future<void> disconnect() async {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    await _closeSockets();
+    _connected = false;
+    _serverIp = null;
+    _serverAddress = null;
+    _emit(false);
+  }
+
+  Future<void> dispose() async {
+    // disconnect() emite en el stream, asi que hay que esperarlo antes de
+    // cerrar el controller.
+    await disconnect();
+    _disposed = true;
+    await _connectionController.close();
   }
 }

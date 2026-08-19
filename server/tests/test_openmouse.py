@@ -91,7 +91,10 @@ class TestUninstallLinux:
         assert cmd[0] == "sh"
         assert cmd[1] == "-c"
         assert "rm -rf" in cmd[2]
-        assert str(install_dir) in cmd[2]
+        # La ruta viaja como argumento, no interpolada en el script: asi una
+        # ruta con comillas no puede alterar el comando.
+        assert str(install_dir) not in cmd[2]
+        assert str(install_dir) in cmd[3:]
         assert kwargs.get("start_new_session") is True
 
     def test_no_op_when_nothing_installed(self, tmp_path, monkeypatch):
@@ -108,3 +111,35 @@ class TestUninstallLinux:
         from openmouse import uninstall
         uninstall()  # should not raise
         assert called == []  # no removal scheduled if dir doesn't exist
+
+
+class TestThreadsafeStop:
+    """El menu del tray corre en su propio hilo; parar el servidor desde ahi
+    tiene que despertar al event loop, no solo marcar el Event."""
+
+    def test_callback_wakes_a_sleeping_event_loop(self):
+        import asyncio
+        import importlib
+        import threading
+        import time
+
+        openmouse = importlib.import_module("openmouse")
+
+        async def scenario():
+            loop = asyncio.get_running_loop()
+            stop_event = asyncio.Event()
+            stop_from_tray = openmouse.threadsafe_callback(loop, stop_event.set)
+
+            # Sin trafico de red que despierte al selector, un stop_event.set()
+            # normal desde otro hilo dejaria el loop dormido hasta el timeout.
+            threading.Thread(
+                target=lambda: (time.sleep(0.1), stop_from_tray()),
+                daemon=True,
+            ).start()
+
+            start = time.monotonic()
+            await asyncio.wait_for(stop_event.wait(), timeout=3)
+            return time.monotonic() - start
+
+        elapsed = asyncio.run(scenario())
+        assert elapsed < 1.0, f"el loop tardo {elapsed:.2f}s en despertar"

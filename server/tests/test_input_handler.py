@@ -74,3 +74,101 @@ class TestKeyText:
     def test_type_text(self, handler):
         handler.type_text("hello")
         handler._keyboard.type.assert_called_once_with("hello")
+
+
+class TestResolveKey:
+    def test_printable_characters_pass_through(self):
+        from input_handler import InputHandler
+        handler = InputHandler()
+        assert handler.resolve_key(ord("a")) == "a"
+        assert handler.resolve_key(ord("ñ")) == "ñ"
+
+    def test_special_codes_map_to_real_keys(self):
+        from pynput.keyboard import Key
+        from input_handler import InputHandler
+        from protocol import SPECIAL_KEYS
+        handler = InputHandler()
+        assert handler.resolve_key(SPECIAL_KEYS["enter"]) == Key.enter
+        assert handler.resolve_key(SPECIAL_KEYS["up"]) == Key.up
+        assert handler.resolve_key(SPECIAL_KEYS["shift"]) == Key.shift
+        assert handler.resolve_key(SPECIAL_KEYS["f1"]) == Key.f1
+
+    def test_every_special_code_resolves(self):
+        from input_handler import InputHandler
+        from protocol import SPECIAL_KEYS
+        handler = InputHandler()
+        for name, code in SPECIAL_KEYS.items():
+            assert handler.resolve_key(code) is not None, name
+
+    def test_unmapped_private_use_codes_are_dropped_not_typed(self):
+        from input_handler import InputHandler
+        handler = InputHandler()
+        assert handler.resolve_key(0xE0FF) is None
+        assert handler.resolve_key(0x0007) is None
+
+    def test_key_press_survives_a_failing_backend(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+        handler = InputHandler()
+        handler._keyboard = MagicMock()
+        handler._keyboard.press.side_effect = ValueError("backend roto")
+        handler.key_press(ord("a"), 0)  # no debe propagar
+
+
+class TestReleaseAll:
+    """Si el movil pierde el WiFi despues de un KeyDown, nadie enviara el
+    KeyUp: la tecla se queda pulsada en el PC del usuario."""
+
+    def test_releases_keys_still_held(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+        from protocol import SPECIAL_KEYS
+
+        handler = InputHandler()
+        handler._keyboard = MagicMock()
+        handler.key_press(ord("a"), 0)
+        handler.key_press(SPECIAL_KEYS["shift"], 0)
+        handler._keyboard.release.reset_mock()
+
+        handler.release_all()
+
+        assert handler._keyboard.release.call_count == 2
+
+    def test_does_not_release_keys_already_released(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+
+        handler = InputHandler()
+        handler._keyboard = MagicMock()
+        handler.key_press(ord("a"), 0)
+        handler.key_press(ord("a"), 1)
+        handler._keyboard.release.reset_mock()
+
+        handler.release_all()
+
+        handler._keyboard.release.assert_not_called()
+
+    def test_releases_mouse_buttons_still_held(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+
+        handler = InputHandler()
+        handler._mouse = MagicMock()
+        handler.click("left", 0)  # press sin release
+        handler._mouse.release.reset_mock()
+
+        handler.release_all()
+
+        handler._mouse.release.assert_called_once()
+
+    def test_is_safe_to_call_twice(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+
+        handler = InputHandler()
+        handler._keyboard = MagicMock()
+        handler.key_press(ord("a"), 0)
+        handler.release_all()
+        handler._keyboard.release.reset_mock()
+        handler.release_all()
+        handler._keyboard.release.assert_not_called()

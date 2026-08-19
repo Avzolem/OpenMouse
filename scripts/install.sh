@@ -44,10 +44,23 @@ fi
 pkill -x openmouse 2>/dev/null || true
 
 # 4. Download
+# Bajamos a un temporal y movemos al final: escribir directamente sobre
+# $BIN_PATH deja un binario truncado pero ejecutable si la descarga se corta,
+# y el autostart apuntaria a el.
 mkdir -p "$INSTALL_DIR"
+TMP_PATH="$BIN_PATH.download"
+trap 'rm -f "$TMP_PATH"' EXIT INT TERM
 echo "OpenMouse: downloading from $URL"
-curl -fsSL -o "$BIN_PATH" "$URL"
-chmod +x "$BIN_PATH"
+curl -fsSL -o "$TMP_PATH" "$URL"
+
+if [ ! -s "$TMP_PATH" ]; then
+    echo "OpenMouse: download failed (empty file)." >&2
+    exit 1
+fi
+
+chmod +x "$TMP_PATH"
+mv -f "$TMP_PATH" "$BIN_PATH"
+trap - EXIT INT TERM
 
 # 5. Autostart entry
 mkdir -p "$(dirname "$AUTOSTART")"
@@ -55,7 +68,9 @@ cat > "$AUTOSTART" <<EOF
 [Desktop Entry]
 Type=Application
 Name=OpenMouse
+Comment=Control your PC from your phone over WiFi
 Exec=$BIN_PATH
+Terminal=false
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true

@@ -23,6 +23,56 @@ class PacketType(IntEnum):
     VOLUME_MUTE = 0x35
 
 
+# Codigos de tecla especiales.
+#
+# KEY_PRESS.key_code es un u16 que normalmente lleva un code point Unicode. Las
+# teclas sin representacion textual (Enter, flechas, Shift, F1...) se envian en
+# el Area de Uso Privado, que nunca aparece en texto real, asi que el rango es
+# libre sin cambiar el formato del cable. Este mapa lo espeja
+# app/lib/models/packet.dart — cambia ambos a la vez.
+SPECIAL_KEY_BASE = 0xE000
+
+SPECIAL_KEYS = {
+    "enter": 0xE000,
+    "backspace": 0xE001,
+    "tab": 0xE002,
+    "escape": 0xE003,
+    "delete": 0xE004,
+    "insert": 0xE005,
+    "home": 0xE006,
+    "end": 0xE007,
+    "page_up": 0xE008,
+    "page_down": 0xE009,
+    "up": 0xE00A,
+    "down": 0xE00B,
+    "left": 0xE00C,
+    "right": 0xE00D,
+    "shift": 0xE00E,
+    "shift_r": 0xE00F,
+    "ctrl": 0xE010,
+    "ctrl_r": 0xE011,
+    "alt": 0xE012,
+    "alt_r": 0xE013,
+    "cmd": 0xE014,
+    "cmd_r": 0xE015,
+    "caps_lock": 0xE016,
+    "f1": 0xE020,
+    "f2": 0xE021,
+    "f3": 0xE022,
+    "f4": 0xE023,
+    "f5": 0xE024,
+    "f6": 0xE025,
+    "f7": 0xE026,
+    "f8": 0xE027,
+    "f9": 0xE028,
+    "f10": 0xE029,
+    "f11": 0xE02A,
+    "f12": 0xE02B,
+}
+
+SPECIAL_KEY_NAMES = {code: name for name, code in SPECIAL_KEYS.items()}
+
+
 def parse_udp_packet(data: bytes) -> tuple[PacketType, dict] | None:
     """Parse a UDP packet. Returns (PacketType, payload_dict) or None."""
     if len(data) < 1:

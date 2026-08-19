@@ -17,12 +17,29 @@ class _TrackpadState extends State<Trackpad> {
   static const double _scrollSensitivity = 0.5;
   double _scrollAccumulator = 0.0;
 
-  void _onPanUpdate(DragUpdateDetails details) {
-    final dx = (details.delta.dx * _sensitivity).round();
-    final dy = (details.delta.dy * _sensitivity).round();
+  /// Un unico reconocedor de escala cubre ambos gestos: scale es un superset de
+  /// pan, y declarar los dos en el mismo GestureDetector dispara una asercion.
+  /// Un dedo mueve el cursor; dos dedos hacen scroll.
+  void _onScaleStart(ScaleStartDetails details) {
+    _scrollAccumulator = 0.0;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount >= 2) {
+      _accumulateScroll(details.focalPointDelta.dy);
+      return;
+    }
+    final dx = _clampDelta(details.focalPointDelta.dx * _sensitivity);
+    final dy = _clampDelta(details.focalPointDelta.dy * _sensitivity);
     if (dx != 0 || dy != 0) {
       widget.connectionService.sendUdp(Packet.mouseMove(dx, dy));
     }
+  }
+
+  /// dx/dy viajan como int16; un gesto muy rapido puede desbordarlos.
+  static int _clampDelta(double value) {
+    if (value.isNaN || value.isInfinite) return 0;
+    return value.round().clamp(-32768, 32767);
   }
 
   void _onTap() {
@@ -38,19 +55,16 @@ class _TrackpadState extends State<Trackpad> {
   }
 
   void _onScrollUpdate(DragUpdateDetails details) {
-    _scrollAccumulator += details.delta.dy * _scrollSensitivity;
-    final scrollAmount = _scrollAccumulator.truncate();
-    if (scrollAmount != 0) {
-      widget.connectionService.sendUdp(Packet.scroll(-scrollAmount));
-      _scrollAccumulator -= scrollAmount;
-    }
+    _accumulateScroll(details.delta.dy);
   }
 
-  void _onTwoFingerScroll(ScaleUpdateDetails details) {
-    if (details.pointerCount < 2) return;
-    final dy = (details.focalPointDelta.dy * _scrollSensitivity).round();
-    if (dy != 0) {
-      widget.connectionService.sendUdp(Packet.scroll(-dy));
+  void _accumulateScroll(double deltaY) {
+    _scrollAccumulator += deltaY * _scrollSensitivity;
+    final scrollAmount = _scrollAccumulator.truncate();
+    if (scrollAmount != 0) {
+      // Se niega antes de acotar: -(-32768) volveria a salirse del int16.
+      widget.connectionService.sendUdp(Packet.scroll(_clampDelta(-scrollAmount.toDouble())));
+      _scrollAccumulator -= scrollAmount;
     }
   }
 
@@ -62,11 +76,11 @@ class _TrackpadState extends State<Trackpad> {
         Expanded(
           flex: 85,
           child: GestureDetector(
-            onPanUpdate: _onPanUpdate,
             onTap: _onTap,
             onDoubleTap: _onDoubleTap,
             onLongPress: _onLongPress,
-            onScaleUpdate: _onTwoFingerScroll,
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: _onScaleUpdate,
             child: Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF16213E),

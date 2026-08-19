@@ -99,3 +99,47 @@ class TestParseTcpPacket:
         data = struct.pack("!B", 0xFF)
         result = parse_tcp_packet(data)
         assert result is None
+
+
+class TestSpecialKeys:
+    """Antes, el cliente enmascaraba el keyId de Flutter con 0xFFFF y el
+    servidor hacia chr() del resultado: la flecha arriba escribia chr(772) y
+    Shift escribia 'A' con breve. Las teclas sin texto van ahora en el Area de
+    Uso Privado."""
+
+    def test_codes_fit_in_the_wire_u16(self):
+        from protocol import SPECIAL_KEYS
+        for name, code in SPECIAL_KEYS.items():
+            assert 0 <= code <= 0xFFFF, name
+
+    def test_codes_live_in_the_unicode_private_use_area(self):
+        from protocol import SPECIAL_KEYS
+        for name, code in SPECIAL_KEYS.items():
+            assert 0xE000 <= code <= 0xF8FF, f"{name} pisa texto real"
+
+    def test_codes_are_unique(self):
+        from protocol import SPECIAL_KEYS
+        assert len(set(SPECIAL_KEYS.values())) == len(SPECIAL_KEYS)
+
+    def test_dart_client_mirrors_the_same_codes(self):
+        """protocol.py y packet.dart deben cambiar en lockstep o el cable miente."""
+        import re
+        from pathlib import Path
+        from protocol import SPECIAL_KEYS
+
+        dart = Path(__file__).resolve().parents[2] / "app/lib/models/packet.dart"
+        source = dart.read_text(encoding="utf-8")
+        block = re.search(r"_specialKeys\s*=\s*\{(.*?)\};", source, re.S)
+        assert block, "no se encontro _specialKeys en packet.dart"
+
+        # 0x0010000000d: 0xE000, // enter
+        dart_codes = {
+            name.strip(): int(code, 16)
+            for code, name in re.findall(
+                r"0x[0-9a-fA-F]+:\s*(0x[0-9a-fA-F]+),\s*//\s*(\w+)", block.group(1)
+            )
+        }
+        # Los nombres difieren de estilo entre lenguajes; comparamos los codigos.
+        assert set(dart_codes.values()) == set(SPECIAL_KEYS.values()), (
+            "los codigos de tecla especiales divergen entre packet.dart y protocol.py"
+        )

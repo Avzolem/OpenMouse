@@ -20,6 +20,8 @@ class DiscoveryService {
   static const String serviceType = '_openmouse._tcp';
 
   BonsoirDiscovery? _discovery;
+  StreamSubscription? _eventSub;
+  bool _disposed = false;
   final StreamController<List<DiscoveredServer>> _serversController =
       StreamController<List<DiscoveredServer>>.broadcast();
   final Map<String, DiscoveredServer> _servers = {};
@@ -28,11 +30,14 @@ class DiscoveryService {
   List<DiscoveredServer> get servers => _servers.values.toList();
 
   Future<void> startScan() async {
+    if (_disposed) return;
+    await stopScan();
     _servers.clear();
-    _discovery = BonsoirDiscovery(type: serviceType);
-    await _discovery!.ready;
+    final discovery = BonsoirDiscovery(type: serviceType);
+    _discovery = discovery;
+    await discovery.ready;
 
-    _discovery!.eventStream!.listen((event) {
+    _eventSub = discovery.eventStream!.listen((event) {
       if (event.type == BonsoirDiscoveryEventType.discoveryServiceResolved) {
         final service = event.service as ResolvedBonsoirService;
         final ip = service.host;
@@ -48,25 +53,35 @@ class DiscoveryService {
           udpPort: udpPort,
         );
         _servers[ip] = server;
-        _serversController.add(servers);
+        _emit();
       } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceLost) {
         final service = event.service;
         if (service == null) return;
         _servers.removeWhere((_, s) => s.name == service.name);
-        _serversController.add(servers);
+        _emit();
       }
     });
 
-    await _discovery!.start();
+    await discovery.start();
+  }
+
+  void _emit() {
+    // Los eventos de bonsoir pueden llegar despues de cerrar la pantalla.
+    if (!_disposed && !_serversController.isClosed) {
+      _serversController.add(servers);
+    }
   }
 
   Future<void> stopScan() async {
+    await _eventSub?.cancel();
+    _eventSub = null;
     await _discovery?.stop();
     _discovery = null;
   }
 
-  void dispose() {
-    stopScan();
-    _serversController.close();
+  Future<void> dispose() async {
+    _disposed = true;
+    await stopScan();
+    await _serversController.close();
   }
 }

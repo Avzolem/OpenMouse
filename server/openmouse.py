@@ -9,7 +9,6 @@ from pathlib import Path
 from input_handler import InputHandler
 from network import UdpServer, TcpServer
 from discovery import Discovery
-from tray import Tray
 from protocol import UDP_PORT, TCP_PORT
 
 logging.basicConfig(
@@ -124,8 +123,10 @@ def uninstall():
             # Schedule detached removal so we can delete the directory we're
             # currently running from. Mirrors the Windows .bat pattern.
             import subprocess
+            # La ruta va como argumento, no interpolada en el script: asi una
+            # ruta con comillas no puede alterar el comando.
             subprocess.Popen(
-                ["sh", "-c", f'sleep 2 && rm -rf "{install_dir}"'],
+                ["sh", "-c", 'sleep 2; rm -rf "$1"', "sh", str(install_dir)],
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -135,7 +136,22 @@ def uninstall():
     logger.info("OpenMouse uninstalled.")
 
 
+def threadsafe_callback(loop, fn):
+    """Envuelve fn para poder invocarla desde otro hilo.
+
+    Los menus de pystray corren en el hilo del tray. Llamar ahi a
+    stop_event.set() marca el Event pero NO despierta al event loop, que sigue
+    dormido en el selector hasta que llegue trafico de red — asi que Quit no
+    cerraba el servidor. call_soon_threadsafe si lo despierta.
+    """
+    def callback(*_args, **_kwargs):
+        loop.call_soon_threadsafe(fn)
+
+    return callback
+
+
 async def run_server():
+    loop = asyncio.get_running_loop()
     handler = InputHandler()
     udp_server = UdpServer(handler, port=UDP_PORT)
     tcp_server = TcpServer(handler, port=TCP_PORT)
@@ -144,40 +160,78 @@ async def run_server():
     stop_event = asyncio.Event()
     should_uninstall = False
 
-    def quit_app():
+    def _request_stop():
         stop_event.set()
 
-    def uninstall_and_quit():
+    def _request_uninstall():
         nonlocal should_uninstall
         should_uninstall = True
         stop_event.set()
 
-    ip = discovery.start()
+    # El tray invoca estos callbacks desde su propio hilo.
+    quit_app = threadsafe_callback(loop, _request_stop)
+    uninstall_and_quit = threadsafe_callback(loop, _request_uninstall)
+
+    ip = await discovery.start_async()
     logger.info(f"OpenMouse server running at {ip}")
 
-    tray = Tray(ip, on_quit=quit_app, on_uninstall=uninstall_and_quit)
+    # El tray es opcional: en un escritorio sin GTK/appindicator, pystray falla
+    # al importarse. Eso no debe impedir controlar el PC desde el movil, que es
+    # lo que hace la aplicacion.
+    tray = None
+    try:
+        from tray import Tray
+
+        tray = Tray(ip, on_quit=quit_app, on_uninstall=uninstall_and_quit)
+    except Exception:
+        logger.warning(
+            "Sin icono en la bandeja del sistema; el servidor sigue activo. "
+            "Para pararlo, cierra el proceso.",
+            exc_info=True,
+        )
 
     def on_connect(addr):
-        tray.set_status(f"Connected: {addr[0]}")
+        if tray:
+            tray.set_status(f"Connected: {addr[0]}")
 
     def on_disconnect(addr):
-        tray.set_status("Waiting for connection...")
+        if tray:
+            tray.set_status("Waiting for connection...")
 
     tcp_server.on_client_connected = on_connect
     tcp_server.on_client_disconnected = on_disconnect
 
-    await udp_server.start()
-    await tcp_server.start()
-    tray.start()
+    try:
+        await udp_server.start()
+        await tcp_server.start()
+    except OSError:
+        logger.exception(
+            f"No se pudieron abrir los puertos UDP:{UDP_PORT} / TCP:{TCP_PORT}. "
+            "Probablemente ya hay otra instancia de OpenMouse en marcha."
+        )
+        await udp_server.stop()
+        await tcp_server.stop()
+        discovery.stop()
+        return
+
+    if tray:
+        try:
+            tray.start()
+        except Exception:
+            logger.warning("No se pudo arrancar el icono de bandeja", exc_info=True)
+            tray = None
 
     logger.info(f"Listening — UDP:{UDP_PORT} TCP:{TCP_PORT}")
 
-    await stop_event.wait()
-
-    tray.stop()
-    await udp_server.stop()
-    await tcp_server.stop()
-    discovery.stop()
+    try:
+        await stop_event.wait()
+    finally:
+        # Pase lo que pase (Ctrl+C incluido), soltamos puertos y mDNS.
+        if tray:
+            tray.stop()
+        await udp_server.stop()
+        await tcp_server.stop()
+        discovery.stop()
 
     if should_uninstall:
         uninstall()

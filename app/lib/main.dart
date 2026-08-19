@@ -1,4 +1,6 @@
 // app/lib/main.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:openmouse/services/connection_service.dart';
 import 'package:openmouse/screens/home_screen.dart';
@@ -19,7 +21,7 @@ class _OpenMouseAppState extends State<OpenMouseApp> {
 
   @override
   void dispose() {
-    _connectionService.dispose();
+    unawaited(_connectionService.dispose());
     super.dispose();
   }
 

@@ -19,7 +19,16 @@ class _KeyboardInputState extends State<KeyboardInput> {
   bool _keyboardVisible = false;
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) _releaseHeldKeys();
+    });
+  }
+
+  @override
   void dispose() {
+    _releaseHeldKeys();
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -44,13 +53,28 @@ class _KeyboardInputState extends State<KeyboardInput> {
     }
   }
 
+  /// Teclas que hemos enviado como "pulsada" y aun no soltamos. Si el widget
+  /// pierde el foco entre el KeyDown y el KeyUp, la tecla se quedaria pulsada
+  /// en el PC del usuario para siempre.
+  final Set<int> _pressed = {};
+
   void _onKey(KeyEvent event) {
-    final keyCode = event.logicalKey.keyId & 0xFFFF;
+    final keyCode = Packet.encodeKey(event.logicalKey);
+    if (keyCode == null) return;
     if (event is KeyDownEvent) {
+      _pressed.add(keyCode);
       widget.connectionService.sendTcp(Packet.keyPress(keyCode, 0));
     } else if (event is KeyUpEvent) {
+      _pressed.remove(keyCode);
       widget.connectionService.sendTcp(Packet.keyPress(keyCode, 1));
     }
+  }
+
+  void _releaseHeldKeys() {
+    for (final keyCode in _pressed) {
+      widget.connectionService.sendTcp(Packet.keyPress(keyCode, 1));
+    }
+    _pressed.clear();
   }
 
   @override
