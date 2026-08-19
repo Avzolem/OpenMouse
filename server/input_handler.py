@@ -51,6 +51,14 @@ keyboard_controller = KeyboardController()
 
 
 class InputHandler:
+    """Envia eventos de entrada al SO.
+
+    Ningun fallo del backend (X11 caido, sesion bloqueada, tecla que el layout
+    no acepta) debe propagarse: estos metodos se llaman desde el event loop y
+    desde el callback de UDP, donde una excepcion tumba la conexion o llena el
+    log con un traceback por datagrama a 60-100 Hz.
+    """
+
     def __init__(self):
         self._mouse = mouse_controller
         self._keyboard = keyboard_controller
@@ -59,26 +67,43 @@ class InputHandler:
         # la tecla se queda hundida en el PC del usuario.
         self._held_keys = set()
         self._held_buttons = set()
+        self._backend_failed = False
+
+    def _safe(self, description, action):
+        try:
+            action()
+        except Exception:
+            # Solo se avisa una vez: a 60-100 Hz, un backend caido inundaria
+            # el log con el mismo traceback.
+            if not self._backend_failed:
+                self._backend_failed = True
+                logger.warning(
+                    f"el backend de entrada rechazo '{description}'; "
+                    "se omiten los avisos siguientes",
+                    exc_info=True,
+                )
+            else:
+                logger.debug(f"fallo de entrada: {description}")
 
     def move(self, dx: int, dy: int):
-        self._mouse.move(dx, dy)
+        self._safe("move", lambda: self._mouse.move(dx, dy))
 
     def scroll(self, dy: int):
-        self._mouse.scroll(0, dy)
+        self._safe("scroll", lambda: self._mouse.scroll(0, dy))
 
     def click(self, button: str, action: int):
         btn = Button.left if button == "left" else Button.right
         if action == 0:
-            self._mouse.press(btn)
+            self._safe("press", lambda: self._mouse.press(btn))
             self._held_buttons.add(btn)
         elif action == 1:
-            self._mouse.release(btn)
+            self._safe("release", lambda: self._mouse.release(btn))
             self._held_buttons.discard(btn)
         elif action == 2:
-            self._mouse.click(btn, 1)
+            self._safe("click", lambda: self._mouse.click(btn, 1))
 
     def double_click(self):
-        self._mouse.click(Button.left, 2)
+        self._safe("double_click", lambda: self._mouse.click(Button.left, 2))
 
     def resolve_key(self, key_code: int):
         """Traduce un key_code del protocolo a algo que pynput sepa pulsar.
@@ -101,38 +126,25 @@ class InputHandler:
         if key is None:
             logger.debug(f"key_code sin mapeo, ignorado: {key_code}")
             return
-        try:
-            if action == 0:
-                self._keyboard.press(key)
-                self._held_keys.add(key)
-            elif action == 1:
-                self._keyboard.release(key)
-                self._held_keys.discard(key)
-        except Exception:
-            # Una tecla que el backend no acepta no debe tumbar la conexion.
-            logger.warning(f"no se pudo enviar la tecla {key_code}", exc_info=True)
+        if action == 0:
+            self._safe(f"key_press {key_code}", lambda: self._keyboard.press(key))
+            self._held_keys.add(key)
+        elif action == 1:
+            self._safe(f"key_release {key_code}", lambda: self._keyboard.release(key))
+            self._held_keys.discard(key)
 
     def release_all(self):
         """Suelta todo lo que quedo pulsado. Se llama cuando se va el cliente."""
         for key in list(self._held_keys):
-            try:
-                self._keyboard.release(key)
-            except Exception:
-                logger.warning(f"no se pudo soltar la tecla {key!r}", exc_info=True)
+            self._safe(f"release {key!r}", lambda k=key: self._keyboard.release(k))
         self._held_keys.clear()
 
         for button in list(self._held_buttons):
-            try:
-                self._mouse.release(button)
-            except Exception:
-                logger.warning(f"no se pudo soltar el boton {button!r}", exc_info=True)
+            self._safe(f"release {button!r}", lambda b=button: self._mouse.release(b))
         self._held_buttons.clear()
 
     def type_text(self, text: str):
-        try:
-            self._keyboard.type(text)
-        except Exception:
-            logger.warning("no se pudo escribir el texto", exc_info=True)
+        self._safe("type_text", lambda: self._keyboard.type(text))
 
     def media(self, command: str):
         media_keys = {
@@ -145,5 +157,6 @@ class InputHandler:
         }
         key = media_keys.get(command)
         if key:
-            self._keyboard.press(key)
-            self._keyboard.release(key)
+            self._safe(f"media {command}", lambda: (
+                self._keyboard.press(key), self._keyboard.release(key)
+            ))

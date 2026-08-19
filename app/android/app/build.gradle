@@ -46,7 +46,18 @@ android {
 
     buildTypes {
         release {
-            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            // Sin key.properties se firmaba con la clave de debug sin avisar, y
+            // esa clave es publica: el APK publicado no acreditaria su origen.
+            // En CI eso debe romper la build; en local basta con avisar.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.release
+            } else if (System.getenv("CI")) {
+                throw new GradleException(
+                    "Falta android/key.properties: no se puede publicar una release sin firmar correctamente.")
+            } else {
+                logger.warn("OpenMouse: sin key.properties, la APK release se firma con la clave de DEBUG.")
+                signingConfig = signingConfigs.debug
+            }
         }
     }
 }

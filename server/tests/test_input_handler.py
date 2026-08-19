@@ -172,3 +172,42 @@ class TestReleaseAll:
         handler._keyboard.release.reset_mock()
         handler.release_all()
         handler._keyboard.release.assert_not_called()
+
+
+class TestBackendFailures:
+    """El backend puede caerse (X11 sin sesion, pantalla bloqueada). Ninguna de
+    estas llamadas debe propagar: move() y scroll() corren en el callback de
+    UDP, donde una excepcion son 60-100 tracebacks por segundo."""
+
+    def _broken_handler(self):
+        from unittest.mock import MagicMock
+        from input_handler import InputHandler
+        handler = InputHandler()
+        handler._mouse = MagicMock()
+        handler._keyboard = MagicMock()
+        for mock in (handler._mouse, handler._keyboard):
+            for name in ("move", "scroll", "press", "release", "click", "type"):
+                getattr(mock, name).side_effect = RuntimeError("backend caido")
+        return handler
+
+    def test_no_input_operation_propagates(self):
+        handler = self._broken_handler()
+        handler.move(5, 5)
+        handler.scroll(3)
+        handler.click("left", 0)
+        handler.click("left", 1)
+        handler.click("right", 2)
+        handler.double_click()
+        handler.key_press(ord("a"), 0)
+        handler.key_press(ord("a"), 1)
+        handler.type_text("hola")
+        handler.media("play_pause")
+        handler.release_all()
+
+    def test_only_warns_once_about_a_dead_backend(self, caplog):
+        import logging
+        handler = self._broken_handler()
+        with caplog.at_level(logging.WARNING, logger="openmouse.input"):
+            for _ in range(50):
+                handler.move(1, 1)
+        assert len(caplog.records) == 1

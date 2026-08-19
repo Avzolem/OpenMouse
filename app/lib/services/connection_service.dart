@@ -22,6 +22,10 @@ class ConnectionService {
   bool _disposed = false;
   Timer? _reconnectTimer;
   bool _reconnecting = false;
+  // Cada connect()/disconnect() abre una generacion nueva. Un intento en vuelo
+  // que termine despues de que el usuario haya pulsado Desconectar pertenece a
+  // una generacion vieja y debe recoger sus sockets en vez de revivir.
+  int _generation = 0;
 
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
@@ -34,12 +38,23 @@ class ConnectionService {
 
   Future<void> connect(String ip,
       {int udpPort = defaultUdpPort, int tcpPort = defaultTcpPort}) async {
+    // La generacion se toma antes del primer await: si se captura despues, un
+    // disconnect() que ocurra mientras tanto queda pisado por este mismo
+    // connect y la conexion revive.
+    final generation = ++_generation;
     // Soltar cualquier socket anterior: reconectar sin cerrarlos los filtraba.
     await _closeSockets();
 
     final socket = await Socket.connect(ip, tcpPort,
         timeout: const Duration(seconds: 5));
     final udp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+
+    if (generation != _generation || _disposed) {
+      // Alguien desconecto o reconecto mientras abriamos: esto ya no vale.
+      socket.destroy();
+      udp.close();
+      return;
+    }
 
     _serverIp = ip;
     _serverAddress = socket.remoteAddress;
@@ -133,6 +148,7 @@ class ConnectionService {
   }
 
   Future<void> disconnect() async {
+    _generation++;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     await _closeSockets();

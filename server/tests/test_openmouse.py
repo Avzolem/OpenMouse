@@ -143,3 +143,48 @@ class TestThreadsafeStop:
 
         elapsed = asyncio.run(scenario())
         assert elapsed < 1.0, f"el loop tardo {elapsed:.2f}s en despertar"
+
+
+class TestEnsureInstalledWindows:
+    """En Windows la instalacion solo debe ocurrir desde un exe congelado."""
+
+    def test_dev_run_does_not_register_autostart(self, tmp_path, monkeypatch):
+        import importlib
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(sys, "frozen", False, raising=False)
+        openmouse = importlib.import_module("openmouse")
+        monkeypatch.setattr(openmouse, "get_install_dir", lambda: tmp_path / "inst")
+
+        called = []
+        monkeypatch.setattr(openmouse, "_register_autostart", lambda p: called.append(p))
+
+        assert openmouse.ensure_installed() is None
+        assert called == []
+        assert not (tmp_path / "inst").exists()
+
+    def test_survives_a_locked_destination_exe(self, tmp_path, monkeypatch):
+        """Windows no deja sobrescribir la imagen de un proceso en marcha."""
+        import importlib
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        openmouse = importlib.import_module("openmouse")
+
+        install_dir = tmp_path / "inst"
+        install_dir.mkdir()
+        (install_dir / "openmouse.exe").write_text("instalado")
+        src = tmp_path / "descargas" / "openmouse.exe"
+        src.parent.mkdir()
+        src.write_text("nuevo")
+
+        monkeypatch.setattr(openmouse, "get_install_dir", lambda: install_dir)
+        monkeypatch.setattr(openmouse, "get_exe_path", lambda: src)
+        monkeypatch.setattr(openmouse.shutil, "copy2", MagicMock(side_effect=PermissionError))
+        registered = []
+        monkeypatch.setattr(openmouse, "_register_autostart", lambda p: registered.append(p))
+
+        dest = openmouse.ensure_installed()
+
+        assert dest == install_dir / "openmouse.exe"
+        assert registered == [dest]

@@ -48,25 +48,42 @@ def ensure_installed():
     if sys.platform != "win32":
         return None
 
+    # Solo instalamos desde un ejecutable congelado. Un `python openmouse.py`
+    # desde el checkout registraba el .py en el arranque de Windows, y ahi
+    # queda una entrada rota en cuanto se mueve el repo.
+    if not getattr(sys, "frozen", False):
+        return None
+
     install_dir = get_install_dir()
     install_dir.mkdir(parents=True, exist_ok=True)
 
     src = get_exe_path()
+    dest = install_dir / src.name
 
-    if getattr(sys, "frozen", False):
-        dest = install_dir / src.name
-        if src.resolve() != dest.resolve():
+    if src.resolve() != dest.resolve():
+        try:
             shutil.copy2(src, dest)
             logger.info(f"Installed to: {dest}")
-        else:
-            dest = src
+        except OSError:
+            # Windows no deja escribir sobre la imagen de un proceso vivo. Si
+            # ya hay una instancia corriendo desde ahi, seguimos con la copia
+            # existente en vez de morir antes de arrancar el servidor.
+            logger.warning(
+                f"No se pudo actualizar {dest}; se sigue con la copia instalada.",
+                exc_info=True,
+            )
+            if not dest.exists():
+                dest = src
     else:
         dest = src
 
-    icon_src = Path(__file__).parent / "icon.png"
+    icon_src = Path(sys._MEIPASS) / "icon.png" if hasattr(sys, "_MEIPASS") else Path(__file__).parent / "icon.png"
     icon_dest = install_dir / "icon.png"
     if icon_src.exists() and icon_src.resolve() != icon_dest.resolve():
-        shutil.copy2(icon_src, icon_dest)
+        try:
+            shutil.copy2(icon_src, icon_dest)
+        except OSError:
+            logger.warning("No se pudo copiar el icono", exc_info=True)
 
     _register_autostart(dest)
     return dest
@@ -240,9 +257,14 @@ async def run_server():
 
 
 if __name__ == "__main__":
-    # Auto-install on first run, then start server
-    ensure_installed()
     try:
+        # Auto-install on first run, then start server. Un fallo aqui no debe
+        # impedir que el servidor arranque: con console=False el usuario no
+        # veria ni el traceback, solo un exe que no hace nada.
+        try:
+            ensure_installed()
+        except Exception:
+            logger.warning("La autoinstalacion fallo; se arranca igualmente", exc_info=True)
         asyncio.run(run_server())
     except KeyboardInterrupt:
         pass

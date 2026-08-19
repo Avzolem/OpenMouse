@@ -16,12 +16,18 @@ class _TrackpadState extends State<Trackpad> {
   static const double _sensitivity = 1.5;
   static const double _scrollSensitivity = 0.5;
   double _scrollAccumulator = 0.0;
+  // El residuo fraccionario del movimiento: redondear cada evento por separado
+  // tiraba todo delta menor de 1 px, y un arrastre lento no movia el cursor.
+  double _moveAccumulatorX = 0.0;
+  double _moveAccumulatorY = 0.0;
 
   /// Un unico reconocedor de escala cubre ambos gestos: scale es un superset de
   /// pan, y declarar los dos en el mismo GestureDetector dispara una asercion.
   /// Un dedo mueve el cursor; dos dedos hacen scroll.
   void _onScaleStart(ScaleStartDetails details) {
     _scrollAccumulator = 0.0;
+    _moveAccumulatorX = 0.0;
+    _moveAccumulatorY = 0.0;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -29,9 +35,13 @@ class _TrackpadState extends State<Trackpad> {
       _accumulateScroll(details.focalPointDelta.dy);
       return;
     }
-    final dx = _clampDelta(details.focalPointDelta.dx * _sensitivity);
-    final dy = _clampDelta(details.focalPointDelta.dy * _sensitivity);
+    _moveAccumulatorX += details.focalPointDelta.dx * _sensitivity;
+    _moveAccumulatorY += details.focalPointDelta.dy * _sensitivity;
+    final dx = _clampDelta(_moveAccumulatorX.truncateToDouble());
+    final dy = _clampDelta(_moveAccumulatorY.truncateToDouble());
     if (dx != 0 || dy != 0) {
+      _moveAccumulatorX -= dx;
+      _moveAccumulatorY -= dy;
       widget.connectionService.sendUdp(Packet.mouseMove(dx, dy));
     }
   }

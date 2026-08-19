@@ -24,7 +24,11 @@ class _ControlScreenState extends State<ControlScreen> {
   void initState() {
     super.initState();
     _connectionSub = widget.connectionService.connectionStream.listen((connected) {
-      if (!connected && mounted) {
+      if (!mounted) return;
+      // Sin este setState el punto de estado del AppBar se quedaba congelado:
+      // solo se repintaba al cambiar de pestana, y mentia en ambos sentidos.
+      setState(() {});
+      if (!connected) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Connection lost. Reconnecting...'),
@@ -41,8 +45,12 @@ class _ControlScreenState extends State<ControlScreen> {
     super.dispose();
   }
 
-  void _disconnect() {
-    widget.connectionService.disconnect();
+  Future<void> _disconnect() async {
+    // Antes de desconectar: si no, la propia desconexion voluntaria emite
+    // false y saca un "Connection lost" que no viene a cuento.
+    await _connectionSub.cancel();
+    await widget.connectionService.disconnect();
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => HomeScreen(connectionService: widget.connectionService),

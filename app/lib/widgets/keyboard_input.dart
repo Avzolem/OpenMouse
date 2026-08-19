@@ -15,7 +15,11 @@ class KeyboardInput extends StatefulWidget {
 
 class _KeyboardInputState extends State<KeyboardInput> {
   final TextEditingController _textController = TextEditingController();
+  // Uno para el KeyboardListener y otro para el TextField: KeyboardListener
+  // envuelve al hijo en un Focus normal, asi que pedirle foco a ese nodo roba
+  // el del TextField y cierra el teclado en vez de abrirlo.
   final FocusNode _focusNode = FocusNode();
+  final FocusNode _textFocusNode = FocusNode();
   bool _keyboardVisible = false;
 
   @override
@@ -24,6 +28,9 @@ class _KeyboardInputState extends State<KeyboardInput> {
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) _releaseHeldKeys();
     });
+    _textFocusNode.addListener(() {
+      if (mounted) setState(() => _keyboardVisible = _textFocusNode.hasFocus);
+    });
   }
 
   @override
@@ -31,18 +38,16 @@ class _KeyboardInputState extends State<KeyboardInput> {
     _releaseHeldKeys();
     _textController.dispose();
     _focusNode.dispose();
+    _textFocusNode.dispose();
     super.dispose();
   }
 
   void _toggleKeyboard() {
-    setState(() {
-      _keyboardVisible = !_keyboardVisible;
-      if (_keyboardVisible) {
-        _focusNode.requestFocus();
-      } else {
-        _focusNode.unfocus();
-      }
-    });
+    if (_textFocusNode.hasFocus) {
+      _textFocusNode.unfocus();
+    } else {
+      _textFocusNode.requestFocus();
+    }
   }
 
   void _sendText() {
@@ -61,6 +66,10 @@ class _KeyboardInputState extends State<KeyboardInput> {
   void _onKey(KeyEvent event) {
     final keyCode = Packet.encodeKey(event.logicalKey);
     if (keyCode == null) return;
+    // Solo las teclas sin texto viajan en tiempo real. Los caracteres los
+    // acumula el TextField y se envian con Send como un unico KEY_TEXT; si se
+    // enviaran por ambos caminos, se escribirian dos veces en el PC.
+    if (keyCode < 0xE000) return;
     if (event is KeyDownEvent) {
       _pressed.add(keyCode);
       widget.connectionService.sendTcp(Packet.keyPress(keyCode, 0));
@@ -91,6 +100,7 @@ class _KeyboardInputState extends State<KeyboardInput> {
                   onKeyEvent: _onKey,
                   child: TextField(
                     controller: _textController,
+                    focusNode: _textFocusNode,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Type text to send...',
@@ -140,7 +150,7 @@ class _KeyboardInputState extends State<KeyboardInput> {
           ),
           const Spacer(),
           Text(
-            'Key presses are sent in real-time.\nUse the text field to type and send phrases.',
+            'Las teclas especiales (Enter, flechas, Escape) se envian al vuelo.\nEscribe una frase y pulsa enviar para teclearla en el PC.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey[600], fontSize: 13),
           ),

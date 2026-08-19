@@ -72,4 +72,15 @@ void main() {
     expect(service.isConnected, isFalse);
     await service.dispose();
   });
+
+  test('un connect en vuelo no revive la conexion tras desconectar', () async {
+    final service = ConnectionService();
+    final pending = service.connect('127.0.0.1', tcpPort: server.port);
+    await service.disconnect();
+    await pending;
+    expect(service.isConnected, isFalse,
+        reason: 'la desconexion manual debe ganar al intento en vuelo');
+    expect(service.serverIp, isNull);
+    await service.dispose();
+  });
 }

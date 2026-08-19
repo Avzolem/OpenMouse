@@ -9,8 +9,11 @@ permissions:
   contents: write
 
 jobs:
+  # PyInstaller enlaza dinamicamente contra la glibc del runner, asi que se
+  # construye sobre la base mas antigua soportada: un binario hecho en 24.04
+  # (glibc 2.39) no arranca en Ubuntu 22.04 ni Debian 12.
   build-linux-x86_64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,7 +34,7 @@ jobs:
           path: server/dist/openmouse-linux-x86_64
 
   build-linux-aarch64:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -109,7 +112,12 @@ jobs:
         run: flutter pub get
       - name: Build APK
         working-directory: app
-        run: flutter build apk --release
+        # El pubspec fija 1.0.0+1; sin esto cada release publica el mismo
+        # versionName/versionCode y Android no la reconoce como actualizacion.
+        run: |
+          flutter build apk --release \
+            --build-name="${GITHUB_REF_NAME#v}" \
+            --build-number="${GITHUB_RUN_NUMBER}"
       - name: Rename
         run: mv app/build/app/outputs/flutter-apk/app-release.apk openmouse-android.apk
       - uses: actions/upload-artifact@v4

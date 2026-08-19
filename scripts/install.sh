@@ -3,6 +3,11 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/Avzolem/OpenMouse/master/scripts/install.sh | sh
 set -eu
 
+if ! command -v curl >/dev/null 2>&1; then
+    echo "OpenMouse: curl is required but not installed." >&2
+    exit 1
+fi
+
 REPO="Avzolem/OpenMouse"
 INSTALL_DIR="$HOME/.local/share/openmouse"
 BIN_PATH="$INSTALL_DIR/openmouse"
@@ -26,19 +31,12 @@ esac
 ASSET="openmouse-linux-${ARCH}"
 echo "OpenMouse: detected ${ARCH}, looking for ${ASSET}..."
 
-# 2. Resolve download URL from the latest release
-URL=$(
-    curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep "browser_download_url.*${ASSET}\"" \
-        | head -n 1 \
-        | cut -d '"' -f 4
-)
-
-if [ -z "$URL" ]; then
-    echo "OpenMouse: no release asset found for ${ARCH}." >&2
-    echo "Check https://github.com/${REPO}/releases" >&2
-    exit 1
-fi
+# 2. Resolve download URL
+# Se usa la URL estable de /releases/latest/download en vez de la API de
+# GitHub: parsear el JSON con grep|cut enmascaraba cualquier fallo de curl
+# (rate limit, red caida) como "asset no encontrado", porque en una tuberia sh
+# el estado de salida es el del ultimo comando y set -e no lo ve.
+URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
 # 3. Stop any running instance (we are about to overwrite the binary)
 pkill -x openmouse 2>/dev/null || true
@@ -51,7 +49,11 @@ mkdir -p "$INSTALL_DIR"
 TMP_PATH="$BIN_PATH.download"
 trap 'rm -f "$TMP_PATH"' EXIT INT TERM
 echo "OpenMouse: downloading from $URL"
-curl -fsSL -o "$TMP_PATH" "$URL"
+if ! curl -fsSL -o "$TMP_PATH" "$URL"; then
+    echo "OpenMouse: download failed for ${ASSET}." >&2
+    echo "Check https://github.com/${REPO}/releases" >&2
+    exit 1
+fi
 
 if [ ! -s "$TMP_PATH" ]; then
     echo "OpenMouse: download failed (empty file)." >&2
