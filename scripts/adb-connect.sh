@@ -3,18 +3,25 @@
 #
 # Orden de intentos:
 #   1. Endpoint guardado del ultimo exito.
-#   2. Descubrimiento mDNS (_adb-tls-connect._tcp), primero con el adb de WSL
-#      y luego con el adb.exe de Windows, que si recibe multicast de la LAN.
-#   3. Se rinde y pide el puerto. Nunca escanea puertos del movil.
+#   2. Se le pregunta al movil su puerto con una consulta mDNS unicast a su IP
+#      (adb-mdns-port.py). Es el camino que funciona: el puerto de conexion
+#      cambia en cada reinicio, pero la IP la conserva el DHCP.
+#   3. Descubrimiento mDNS por multicast, con el adb de WSL y con el adb.exe de
+#      Windows. Suele fallar: WSL en modo NAT no recibe multicast de la LAN.
+#   4. Se rinde y pide el dato. Nunca escanea puertos del movil.
 #
 # Uso:
-#   ./adb-connect.sh                  reconecta solo
-#   ./adb-connect.sh 44671            fuerza puerto, reutiliza la IP guardada
-#   ./adb-connect.sh 192.168.1.80:44671   fuerza IP y puerto
+#   ./adb-connect.sh                      reconecta solo
+#   ./adb-connect.sh 44671                fuerza puerto, reutiliza la IP guardada
+#   ./adb-connect.sh 192.168.100.11       IP nueva, el puerto se pregunta por mDNS
+#   ./adb-connect.sh 192.168.100.11:44671 fuerza IP y puerto
 set -eu
 
 STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/openmouse"
 STATE_FILE="$STATE_DIR/adb-endpoint"
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+MDNS_HELPER="$SCRIPT_DIR/adb-mdns-port.py"
 
 # adb.exe de Windows: unico camino con acceso al multicast de la LAN mientras
 # WSL siga en modo NAT. Si no aparece, el descubrimiento simplemente se salta.
@@ -74,7 +81,23 @@ discover_with() {
         | head -1
 }
 
+# Le pregunta a una IP concreta por su puerto ADB. Un solo paquete al host que
+# ya conocemos, no un barrido.
+ask_host() {
+    [ -n "$1" ] || return 1
+    [ -f "$MDNS_HELPER" ] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    log "-> preguntando por mDNS unicast a $1"
+    answer=$(timeout 30 python3 "$MDNS_HELPER" "$1" 2>/dev/null || true)
+    [ -n "$answer" ] || return 1
+    printf '%s\n' "$answer"
+}
+
 discover() {
+    if [ -n "${saved_ip:-}" ] && found=$(ask_host "$saved_ip"); then
+        printf '%s\n' "$found"
+        return 0
+    fi
     log "-> buscando por mDNS con el adb de WSL"
     found=$(discover_with adb || true)
     if [ -n "$found" ]; then
@@ -92,12 +115,21 @@ saved=$(load_endpoint || true)
 
 # Un argumento suelto puede ser el puerto a secas o el endpoint completo.
 target=""
+saved_ip="${saved%%:*}"
 if [ $# -gt 0 ]; then
     case "$1" in
-        *:*) target="$1" ;;
+        *:*)
+            target="$1"
+            saved_ip="${1%%:*}"
+            ;;
+        *[!0-9]*)
+            # Lleva algo que no es digito: es una IP o un nombre de host.
+            saved_ip="$1"
+            ;;
         *)
-            [ -n "$saved" ] || { log "no hay IP guardada: pasa 'IP:puerto' entero"; exit 2; }
-            target="${saved%%:*}:$1"
+            # Solo digitos: es el puerto, con la IP que ya teniamos.
+            [ -n "$saved_ip" ] || { log "no hay IP guardada: pasa 'IP:puerto' entero"; exit 2; }
+            target="$saved_ip:$1"
             ;;
     esac
 elif [ -n "$saved" ]; then
@@ -119,6 +151,6 @@ fi
 log ""
 log "no se pudo conectar."
 log "Comprueba que el movil este en la WiFi y con la depuracion inalambrica activa."
-log "Si sigue fallando, mira el puerto en Ajustes > Opciones de desarrollador >"
-log "Depuracion inalambrica y ejecuta:  $0 <puerto>"
+log "Si sigue fallando, mira IP y puerto en Ajustes > Opciones de desarrollador >"
+log "Depuracion inalambrica y ejecuta:  $0 <ip>:<puerto>"
 exit 1
