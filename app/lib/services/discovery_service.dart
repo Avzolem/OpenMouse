@@ -25,6 +25,10 @@ class DiscoveryService {
   final StreamController<List<DiscoveredServer>> _serversController =
       StreamController<List<DiscoveredServer>>.broadcast();
   final Map<String, DiscoveredServer> _servers = {};
+  int _resolveFailures = 0;
+
+  /// Cuantos servicios se vieron pero no se pudieron resolver.
+  int get resolveFailures => _resolveFailures;
 
   Stream<List<DiscoveredServer>> get serversStream => _serversController.stream;
   List<DiscoveredServer> get servers => _servers.values.toList();
@@ -33,12 +37,19 @@ class DiscoveryService {
     if (_disposed) return;
     await stopScan();
     _servers.clear();
+    _resolveFailures = 0;
     final discovery = BonsoirDiscovery(type: serviceType);
     _discovery = discovery;
     await discovery.ready;
 
     _eventSub = discovery.eventStream!.listen((event) {
-      if (event.type == BonsoirDiscoveryEventType.discoveryServiceResolved) {
+      if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
+        // bonsoir anuncia el servicio antes de conocer su IP y su puerto. Sin
+        // esta llamada nunca llega discoveryServiceResolved y la pantalla se
+        // queda buscando para siempre aunque el servidor este publicado.
+        event.service?.resolve(discovery.serviceResolver);
+      } else if (event.type ==
+          BonsoirDiscoveryEventType.discoveryServiceResolved) {
         final service = event.service as ResolvedBonsoirService;
         final ip = service.host;
         if (ip == null) return;
@@ -54,6 +65,11 @@ class DiscoveryService {
         );
         _servers[ip] = server;
         _emit();
+      } else if (event.type ==
+          BonsoirDiscoveryEventType.discoveryServiceResolveFailed) {
+        // Que falle la resolucion es recuperable, pero callarlo deja la
+        // pantalla girando sin explicacion.
+        _resolveFailures++;
       } else if (event.type == BonsoirDiscoveryEventType.discoveryServiceLost) {
         final service = event.service;
         if (service == null) return;
