@@ -103,6 +103,8 @@ When adding a new control, the path is: define `PacketType` value in both `proto
 
 `.github/workflows/release.yml` fires on tags matching `v*.*.*` and produces four assets in one GitHub release: `openmouse-linux-x86_64`, `openmouse-linux-aarch64` (built on `ubuntu-24.04-arm`), `openmouse-windows-x86_64.exe`, and `openmouse-android.apk`.
 
+The APK job pins `flutter-version` on purpose. With a bare `channel: stable` a Flutter release breaks the pipeline without anyone touching the repo — 3.47 raised the Gradle floor to 8.14.0 and the job died on a wrapper pinned to 8.10.2 that still built fine locally under 3.44. Bumping that pin means checking `app/android/gradle/wrapper/gradle-wrapper.properties` in the same commit.
+
 `scripts/install.sh` reads the **latest** release and greps for `openmouse-linux-${ARCH}` — renaming a release asset breaks the curl installer.
 
 The APK job needs four repo secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. CI decodes them into `app/android/app/openmouse-release.jks` and `app/android/key.properties` at build time — neither file is ever committed.

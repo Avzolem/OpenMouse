@@ -83,9 +83,15 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      # La version va fijada a proposito. Con `channel: stable` a secas, una
+      # subida de Flutter rompe la release sin tocar el repo: la 3.47 empezo a
+      # exigir Gradle >= 8.14.0 y el job fallo con el wrapper en 8.10.2, que
+      # compilaba sin problema en local con la 3.44. Al subir esto, hay que
+      # subir tambien gradle-wrapper.properties si la nueva version lo pide.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.2
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
