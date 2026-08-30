@@ -33,6 +33,17 @@ jobs:
         run: pyinstaller openmouse.spec
       - name: Rename
         run: mv server/dist/openmouse server/dist/openmouse-linux-x86_64
+      # Un binario ha llegado a publicarse sin arrancar siquiera: PyInstaller no
+      # empaquetaba el backend de pynput y moria al importar con "this platform
+      # is not supported". Compilar sin error no demuestra nada, asi que se
+      # arranca de verdad bajo un X virtual y se exige que abra los puertos.
+      - name: Smoke test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          timeout 25 xvfb-run -a server/dist/openmouse-linux-x86_64 > smoke.log 2>&1 || true
+          cat smoke.log
+          grep -q "Listening" smoke.log
       - uses: actions/upload-artifact@v4
         with:
           name: openmouse-linux-x86_64
@@ -54,6 +65,17 @@ jobs:
         run: pyinstaller openmouse.spec
       - name: Rename
         run: mv server/dist/openmouse server/dist/openmouse-linux-aarch64
+      # Un binario ha llegado a publicarse sin arrancar siquiera: PyInstaller no
+      # empaquetaba el backend de pynput y moria al importar con "this platform
+      # is not supported". Compilar sin error no demuestra nada, asi que se
+      # arranca de verdad bajo un X virtual y se exige que abra los puertos.
+      - name: Smoke test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          timeout 25 xvfb-run -a server/dist/openmouse-linux-aarch64 > smoke.log 2>&1 || true
+          cat smoke.log
+          grep -q "Listening" smoke.log
       - uses: actions/upload-artifact@v4
         with:
           name: openmouse-linux-aarch64
