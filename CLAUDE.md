@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Layout
 
-OpenMouse is a two-part system: a Python desktop server (`server/`) and a Flutter Android client (`app/`). They communicate over the local network using a custom binary protocol on UDP 19780 + TCP 19781. `scripts/` holds the Linux curl-installer pair, `.github/workflows/release.yml` builds every shipped artifact, and `docs/superpowers/` holds design specs and implementation plans.
+OpenMouse is a two-part system: a Python desktop server (`server/`) and a Flutter Android client (`app/`). They communicate over the local network using a custom binary protocol on UDP 19780 + TCP 19781. `scripts/` holds the Linux curl-installer pair plus `adb-connect.sh` (dev-only wireless-ADB reconnect), `.github/workflows/release.yml` builds every shipped artifact, and `docs/superpowers/` holds design specs and implementation plans.
 
 ## Common Commands
 
