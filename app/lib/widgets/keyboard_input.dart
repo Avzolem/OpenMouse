@@ -103,7 +103,7 @@ class _KeyboardInputState extends State<KeyboardInput> {
                     focusNode: _textFocusNode,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Type text to send...',
+                      hintText: 'Escribe el texto a enviar...',
                       hintStyle: TextStyle(color: Colors.grey[600]),
                       filled: true,
                       fillColor: const Color(0xFF16213E),
@@ -136,7 +136,7 @@ class _KeyboardInputState extends State<KeyboardInput> {
                 _keyboardVisible ? Icons.keyboard_hide : Icons.keyboard,
               ),
               label: Text(
-                _keyboardVisible ? 'Hide Keyboard' : 'Open Keyboard',
+                _keyboardVisible ? 'Ocultar teclado' : 'Abrir teclado',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F3460),

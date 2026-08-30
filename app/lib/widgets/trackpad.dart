@@ -14,7 +14,11 @@ class Trackpad extends StatefulWidget {
 
 class _TrackpadState extends State<Trackpad> {
   static const double _sensitivity = 1.5;
-  static const double _scrollSensitivity = 0.5;
+
+  /// Muescas de rueda por pixel logico de dedo. Cada muesca son tres lineas en
+  /// Windows, asi que 0.5 daba ~130 muescas por deslizamiento (unas 390 lineas)
+  /// y el scroll se iba de las manos. 0.05 deja una muesca por cada ~20 px.
+  static const double _scrollSensitivity = 0.05;
   double _scrollAccumulator = 0.0;
   // El residuo fraccionario del movimiento: redondear cada evento por separado
   // tiraba todo delta menor de 1 px, y un arrastre lento no movia el cursor.

@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection failed: $e')),
+          SnackBar(content: Text('No se pudo conectar: $e')),
         );
       }
     } finally {
@@ -84,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Searching for servers...',
+                'Buscando servidores...',
                 style: TextStyle(color: Colors.grey[400], fontSize: 16),
               ),
               const SizedBox(height: 32),
@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Looking for OpenMouse servers\non your network...',
+                              'Buscando servidores OpenMouse\nen tu red...',
                               textAlign: TextAlign.center,
                               style: TextStyle(color: Colors.grey[500]),
                             ),
@@ -148,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const Divider(color: Colors.white24),
               const SizedBox(height: 12),
               Text(
-                'Connect manually',
+                'Conectar a mano',
                 style: TextStyle(color: Colors.grey[400], fontSize: 14),
               ),
               const SizedBox(height: 8),
@@ -199,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Connect'),
+                        : const Text('Conectar'),
                   ),
                 ],
               ),

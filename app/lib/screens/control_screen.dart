@@ -31,7 +31,7 @@ class _ControlScreenState extends State<ControlScreen> {
       if (!connected) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Connection lost. Reconnecting...'),
+            content: Text('Se perdio la conexion. Reconectando...'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -47,7 +47,7 @@ class _ControlScreenState extends State<ControlScreen> {
 
   Future<void> _disconnect() async {
     // Antes de desconectar: si no, la propia desconexion voluntaria emite
-    // false y saca un "Connection lost" que no viene a cuento.
+    // false y saca un aviso de conexion perdida que no viene a cuento.
     await _connectionSub.cancel();
     await widget.connectionService.disconnect();
     if (!mounted) return;
@@ -94,7 +94,7 @@ class _ControlScreenState extends State<ControlScreen> {
           IconButton(
             onPressed: _disconnect,
             icon: const Icon(Icons.close),
-            tooltip: 'Disconnect',
+            tooltip: 'Desconectar',
           ),
         ],
       ),
@@ -112,11 +112,11 @@ class _ControlScreenState extends State<ControlScreen> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.keyboard),
-            label: 'Keyboard',
+            label: 'Teclado',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.music_note),
-            label: 'Media',
+            label: 'Multimedia',
           ),
         ],
       ),
