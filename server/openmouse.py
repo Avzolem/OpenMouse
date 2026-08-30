@@ -8,6 +8,7 @@ from pathlib import Path
 
 from input_handler import InputHandler
 from network import UdpServer, TcpServer
+from notifications import notify
 from discovery import Discovery
 from protocol import UDP_PORT, TCP_PORT
 
@@ -209,11 +210,12 @@ async def run_server():
 
     def on_connect(addr):
         if tray:
-            tray.set_status(f"Connected: {addr[0]}")
+            tray.set_status(f"Conectado: {addr[0]}")
+        notify("OpenMouse", f"Móvil conectado desde {addr[0]}", tray=tray)
 
     def on_disconnect(addr):
         if tray:
-            tray.set_status("Waiting for connection...")
+            tray.set_status("Esperando conexion...")
 
     tcp_server.on_client_connected = on_connect
     tcp_server.on_client_disconnected = on_disconnect

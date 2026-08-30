@@ -15,12 +15,23 @@ class Tray:
         self._on_uninstall = on_uninstall
         self._icon = None
         self._thread = None
-        self._status = "Waiting for connection..."
+        self._status = "Esperando conexion..."
 
     def set_status(self, status: str):
         self._status = status
         if self._icon:
             self._icon.update_menu()
+
+    def notify(self, title: str, message: str) -> bool:
+        """Muestra un globo desde el icono. Devuelve si el backend lo acepto.
+
+        pystray toma (mensaje, titulo) en ese orden, y no todos los backends
+        implementan notify(): AppIndicator en Linux lanza NotImplementedError.
+        """
+        if not self._icon:
+            return False
+        self._icon.notify(message, title)
+        return True
 
     def start(self):
         icon_path = Path(__file__).parent / "icon.png"
@@ -32,8 +43,8 @@ class Tray:
             pystray.Menu.SEPARATOR,
         ]
         if self._on_uninstall:
-            menu_items.append(pystray.MenuItem("Uninstall", self._uninstall))
-        menu_items.append(pystray.MenuItem("Quit", self._quit))
+            menu_items.append(pystray.MenuItem("Desinstalar", self._uninstall))
+        menu_items.append(pystray.MenuItem("Salir", self._quit))
 
         self._icon = pystray.Icon(
             "openmouse",
