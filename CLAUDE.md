@@ -90,6 +90,8 @@ The install paths (`~/.local/share/openmouse`, `~/.config/autostart/openmouse.de
 
 ### App structure (`app/lib/`)
 
+`app/` carries only the `android/` platform folder. The iOS, macOS, Linux, Windows and web scaffolding that `flutter create` generates was removed — it was 101 tracked files no build ever touched, and the desktop side of this project is the Python server, not a Flutter app. Run `flutter create --platforms=<name> .` from `app/` to bring one back.
+
 - `services/connection_service.dart` — owns the UDP socket and TCP `Socket`, exposes send-mouse/send-key methods.
 - `services/discovery_service.dart` — wraps `bonsoir` to find `_openmouse._tcp.local.`.
 - `screens/home_screen.dart` — picks a discovered server or accepts a manual IP.
