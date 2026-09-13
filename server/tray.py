@@ -8,6 +8,16 @@ import pystray
 logger = logging.getLogger("openmouse.tray")
 
 
+def backend_name(icon_class=None) -> str:
+    """Nombre corto del backend que eligio pystray: "appindicator", "xorg"...
+
+    pystray decide al importarse y expone la clase del backend como
+    ``pystray.Icon``, asi que su modulo (``pystray._xorg``) lo delata.
+    """
+    module = (icon_class or pystray.Icon).__module__
+    return module.rsplit(".", 1)[-1].lstrip("_")
+
+
 class Tray:
     def __init__(self, ip: str, on_quit, on_uninstall=None):
         self._ip = ip
@@ -54,7 +64,15 @@ class Tray:
         )
         self._thread = threading.Thread(target=self._icon.run, daemon=True)
         self._thread.start()
-        logger.info("System tray started")
+        backend = backend_name()
+        logger.info("System tray started (backend: %s)", backend)
+        if backend == "xorg":
+            # El backend xorg no implementa menus: al pulsar solo ejecuta la
+            # accion por defecto, y este menu no tiene ninguna.
+            logger.warning(
+                "Bandeja con backend xorg: el icono no mostrara menu. "
+                "Faltan PyGObject/AppIndicator en este binario."
+            )
 
     def _quit(self, icon, item):
         icon.stop()

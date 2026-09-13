@@ -24,10 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # El icono de bandeja usa el backend AppIndicator de pystray: al compilar
+      # hacen falta PyGObject y las typelibs de Gtk 3 y AyatanaAppIndicator3,
+      # que PyInstaller mete dentro del binario. PyGObject va fijado a 3.50
+      # porque desde la 3.52 exige girepository-2.0 (GLib 2.80) y esta base
+      # 22.04 trae GLib 2.72. No va en requirements.txt: en Windows no instala.
       - name: Install dependencies
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb dbus pkg-config libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
           pip install -r server/requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller "PyGObject>=3.50,<3.52"
       - name: Build
         working-directory: server
         run: pyinstaller openmouse.spec
@@ -37,13 +44,14 @@ jobs:
       # empaquetaba el backend de pynput y moria al importar con "this platform
       # is not supported". Compilar sin error no demuestra nada, asi que se
       # arranca de verdad bajo un X virtual y se exige que abra los puertos.
+      # Tambien se exige el backend appindicator: con el de xorg el binario
+      # arranca y abre los puertos, pero el icono no tiene menu y no responde.
       - name: Smoke test
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb
-          timeout 25 xvfb-run -a server/dist/openmouse-linux-x86_64 > smoke.log 2>&1 || true
+          timeout 25 xvfb-run -a dbus-run-session -- server/dist/openmouse-linux-x86_64 > smoke.log 2>&1 || true
           cat smoke.log
           grep -q "Listening" smoke.log
+          grep -q "backend: appindicator" smoke.log
       - uses: actions/upload-artifact@v4
         with:
           name: openmouse-linux-x86_64
@@ -56,10 +64,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # El icono de bandeja usa el backend AppIndicator de pystray: al compilar
+      # hacen falta PyGObject y las typelibs de Gtk 3 y AyatanaAppIndicator3,
+      # que PyInstaller mete dentro del binario. PyGObject va fijado a 3.50
+      # porque desde la 3.52 exige girepository-2.0 (GLib 2.80) y esta base
+      # 22.04 trae GLib 2.72. No va en requirements.txt: en Windows no instala.
       - name: Install dependencies
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb dbus pkg-config libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
           pip install -r server/requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller "PyGObject>=3.50,<3.52"
       - name: Build
         working-directory: server
         run: pyinstaller openmouse.spec
@@ -69,13 +84,14 @@ jobs:
       # empaquetaba el backend de pynput y moria al importar con "this platform
       # is not supported". Compilar sin error no demuestra nada, asi que se
       # arranca de verdad bajo un X virtual y se exige que abra los puertos.
+      # Tambien se exige el backend appindicator: con el de xorg el binario
+      # arranca y abre los puertos, pero el icono no tiene menu y no responde.
       - name: Smoke test
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb
-          timeout 25 xvfb-run -a server/dist/openmouse-linux-aarch64 > smoke.log 2>&1 || true
+          timeout 25 xvfb-run -a dbus-run-session -- server/dist/openmouse-linux-aarch64 > smoke.log 2>&1 || true
           cat smoke.log
           grep -q "Listening" smoke.log
+          grep -q "backend: appindicator" smoke.log
       - uses: actions/upload-artifact@v4
         with:
           name: openmouse-linux-aarch64

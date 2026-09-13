@@ -20,6 +20,7 @@ if sys.platform == "win32":
         "pynput._util.win32_vks",
     ]
     _xlib = []
+    _tray = []
 elif sys.platform == "darwin":
     _pynput = [
         "pynput.keyboard._darwin",
@@ -28,6 +29,7 @@ elif sys.platform == "darwin":
         "pynput._util.darwin_vks",
     ]
     _xlib = []
+    _tray = []
 else:
     _pynput = [
         "pynput.keyboard._xorg",
@@ -42,10 +44,38 @@ else:
     # arranca.
     _xlib = collect_submodules("Xlib")
 
+    # El hook de pystray hace collect_submodules("pystray"), que IMPORTA cada
+    # backend al compilar. pystray._util.gtk llama a Gtk.init_check() al
+    # importarse y sin DISPLAY (o sin PyGObject) lanza ImportError, asi que
+    # appindicator y gtk quedaban fuera en silencio y el binario caia en el
+    # backend xorg, que no tiene menu: el icono no hacia nada al pulsarlo. Van
+    # escritos a mano por la misma razon que los de pynput.
+    _tray = [
+        "pystray._appindicator",
+        "pystray._gtk",
+        "pystray._xorg",
+        "pystray._util.gtk",
+        "pystray._util.notify_dbus",
+        "gi.repository.Gtk",
+        "gi.repository.AyatanaAppIndicator3",
+    ]
+    # Sin PyGObject o sin las typelibs, PyInstaller no encuentra nada que
+    # empaquetar y publica otra vez el binario sin menu. Mejor que falle aqui.
+    try:
+        import gi
+
+        gi.require_version("Gtk", "3.0")
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+    except (ImportError, ValueError) as exc:
+        raise SystemExit(
+            "OpenMouse: el icono de bandeja necesita PyGObject y las typelibs "
+            f"de Gtk 3 y AyatanaAppIndicator3 para compilar ({exc})."
+        )
+
 hiddenimports = _pynput + [
     "pynput.keyboard._dummy",
     "pynput.mouse._dummy",
-] + _xlib
+] + _xlib + _tray
 
 
 a = Analysis(
@@ -55,7 +85,17 @@ a = Analysis(
     datas=[('icon.png', '.')],
     hiddenimports=hiddenimports,
     hookspath=[],
-    hooksconfig={},
+    # Gtk 3 es la que usa pystray; sin fijarla el hook de gi puede elegir otra.
+    # Iconos, temas e idiomas se limitan para no inflar el binario con todo lo
+    # que tenga instalado la maquina de compilacion.
+    hooksconfig={
+        "gi": {
+            "module-versions": {"Gtk": "3.0"},
+            "icons": ["Adwaita"],
+            "themes": ["Adwaita"],
+            "languages": ["es", "en_US"],
+        },
+    },
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
